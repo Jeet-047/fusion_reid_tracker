@@ -1,0 +1,16 @@
+    model:
+      cnn_backbone: resnet50
+      transformer_backbone: vit_b_16
+      dim: 768
+      num_htm_layers: 2
+
+    detector:
+      model_path: yolov8n.pt
+      conf_threshold: 0.5
+
+    video:
+      input: Camera1_10minute.mp4
+      output: Camera1_output_10minute.mp4
+
+    matching:
+      threshold: 0.3
