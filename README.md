@@ -17,16 +17,24 @@ A robust, modular pipeline for person re-identification and multi-object trackin
 
 ## 🗺️ Workflow
 
-```mermaid
-graph TD;
-    A[📹 Read Video Frame] --> B[🕵️ Detect Persons (YOLOv8)]
-    B --> C[✂️ Crop & Preprocess]
-    C --> D[🔬 Extract Embeddings (FusionReID)]
-    D --> E[🔎 Match to Memory (Cosine)]
-    E --> F[🆔 Assign/Update IDs]
-    F --> G[🖼️ Draw Boxes & IDs]
-    G --> H[💾 Write to Output Video]
-    H --> A
+```
+📹 Read Video Frame
+   ↓
+🕵️ Detect Persons (YOLOv8)
+   ↓
+✂️ Crop & Preprocess
+   ↓
+🔬 Extract Embeddings (FusionReID)
+   ↓
+🔎 Match to Memory (Cosine)
+   ↓
+🆔 Assign/Update IDs
+   ↓
+🖼️ Draw Boxes & IDs
+   ↓
+💾 Write to Output Video
+   ↓
+(repeat for next frame)
 ```
 
 ---
