@@ -1,0 +1,21 @@
+model:
+  cnn_backbone: resnet50
+  transformer_backbone: vit_b_16
+  dim: 768
+  num_htm_layers: 2
+
+detector:
+  model_path: yolov8n.pt
+  conf_threshold: 0.5
+
+video:
+  input: Office_Test_Video.mp4
+  output: Office_Test_Video_Output.mp4
+
+
+deep_sort:
+  max_age: 90
+  n_init: 3
+  max_cosine_distance: 0.2
+  nms_max_overlap: 1.0
+  nn_budget: null 

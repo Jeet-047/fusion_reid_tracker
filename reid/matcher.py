@@ -1,22 +1,43 @@
 import torch
 import torch.nn.functional as F
+import numpy as np
+from deep_sort_realtime.deepsort_tracker import DeepSort
 
-def cosine_distance(a, b):
-    # a: [N, D], b: [M, D]
-    if a.dim() == 1:
-        a = a.unsqueeze(0)
-    if b.dim() == 1:
-        b = b.unsqueeze(0)
-    return 1 - F.cosine_similarity(a.unsqueeze(1), b.unsqueeze(0), dim=2)
+class DeepSortMatcher:
+    """
+    Wrapper for DeepSort tracker.
+    Parameters:
+        max_age (int): Max frames to keep lost tracks.
+        n_init (int): Frames before track is confirmed.
+        max_cosine_distance (float): Appearance matching threshold.
+        nms_max_overlap (float): NMS overlap threshold.
+        nn_budget (int or None): Max number of embeddings to keep per track.
+        half (bool): Use half precision.
+        bgr (bool): Input images are BGR.
+        embedder_gpu (bool): Use GPU for embedding.
+    """
+    def __init__(self, max_age, n_init, max_cosine_distance, nms_max_overlap, nn_budget, half, bgr, embedder_gpu):
+        self.tracker = DeepSort(
+            max_age=max_age,
+            n_init=n_init,
+            nms_max_overlap=nms_max_overlap,
+            embedder=None,
+            half=half,
+            bgr=bgr,
+            embedder_gpu=embedder_gpu,
+            max_cosine_distance=max_cosine_distance,
+            nn_budget=nn_budget,
+            override_track_class=None
+        )
 
-def match_embeddings(current_embs, id_manager, threshold=0.4):
-    if len(id_manager.id_map) == 0:
-        return [-1] * len(current_embs)
-    memory = torch.stack(list(id_manager.id_map.values()))
-    ids = list(id_manager.id_map.keys())
-    dist = cosine_distance(current_embs, memory)
-    matched = []
-    for row in dist:
-        min_val, min_idx = row.min(0)
-        matched.append(ids[min_idx] if min_val < threshold else -1)
-    return matched
+    def update_tracks(self, boxes, embeddings, frame):
+        if len(boxes) == 0 or len(embeddings) == 0 or len(boxes) != len(embeddings):
+            print(f"Skipping frame: boxes={len(boxes)}, embeddings={len(embeddings)}")
+            return []
+        detections = []
+        for box in boxes:
+            x1, y1, x2, y2 = box
+            w, h = x2 - x1, y2 - y1
+            detections.append(([x1, y1, w, h], 1.0, 'person'))
+        tracks = self.tracker.update_tracks(detections, embeds=embeddings, frame=frame)
+        return tracks

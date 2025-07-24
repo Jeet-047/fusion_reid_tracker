@@ -1,17 +1,17 @@
 # 🚀 FusionReID Tracker
 
-A robust, modular pipeline for person re-identification and multi-object tracking using feature fusion of CNN (ResNet50) and Transformer (ViT) backbones, with YOLOv8 for detection.
+A robust, modular pipeline for person re-identification and multi-object tracking using feature fusion of CNN (ResNet50) and Transformer (ViT) backbones, with YOLOv8 for detection and Deep SORT for robust tracking.
 
 ---
 
 ## 📦 Features
 - 🧑‍🤝‍🧑 **Person Detection** (YOLOv8, only class 0)
 - 🔗 **Feature Fusion** (CNN + ViT)
-- 🆔 **Re-ID Matching** (Cosine similarity, memory bank)
+- 🆔 **Re-ID Matching & Tracking** (Deep SORT, Hungarian algorithm, memory averaging)
 - 🏷️ **ID Assignment & Tracking**
 - 🎥 **Video Input/Output**
 - ⚡ **CUDA/CPU Support**
-- 🛠️ **Configurable via YAML**
+- 🛠️ **Fully Configurable via config.yaml**
 
 ---
 
@@ -26,7 +26,7 @@ A robust, modular pipeline for person re-identification and multi-object trackin
    ↓
 🔬 Extract Embeddings (FusionReID)
    ↓
-🔎 Match to Memory (Cosine)
+🔎 Deep SORT: Appearance + Motion Matching (Hungarian algorithm)
    ↓
 🆔 Assign/Update IDs
    ↓
@@ -50,6 +50,7 @@ A robust, modular pipeline for person re-identification and multi-object trackin
    ```sh
    pip install -r requirements.txt
    ```
+   - This includes `deep_sort_realtime`, `ultralytics`, `torch`, `torchvision`, `opencv-python`, `numpy`, and `pillow`.
 3. **Download YOLOv8 weights:**
    - Place `yolov8n.pt` in the project root (or update the config).
 4. **Prepare your input video:**
@@ -59,7 +60,7 @@ A robust, modular pipeline for person re-identification and multi-object trackin
 
 ## 📝 Configuration
 
-All settings are in `configs/fusion_reid.yaml`:
+All settings are in `configs/config.yaml`:
 ```yaml
 model:
   cnn_backbone: resnet50
@@ -75,8 +76,12 @@ video:
   input: input.mp4
   output: output.mp4
 
-matching:
-  threshold: 0.4
+deep_sort:
+  max_age: 30
+  n_init: 3
+  max_cosine_distance: 0.2
+  nms_max_overlap: 1.0
+  nn_budget: null
 ```
 
 ---
@@ -95,8 +100,8 @@ python main.py
 - **Detection:** YOLOv8 finds all persons in each frame (class 0 only, with confidence threshold).
 - **Preprocessing:** Each detected person is cropped, resized, and normalized.
 - **Embedding:** Crops are passed through FusionReID (ResNet50 + ViT) to get robust embeddings.
-- **Matching:** Embeddings are compared to a memory bank using cosine similarity. If below the matching threshold, the ID is matched; otherwise, a new ID is assigned.
-- **Tracking:** IDs are updated and drawn on the output frame.
+- **Tracking & Re-ID:** Deep SORT uses your embeddings and motion to assign consistent IDs, using the Hungarian algorithm and memory averaging.
+- **Visualization:** IDs and boxes are drawn on the output frame.
 
 ---
 
@@ -107,6 +112,8 @@ python main.py
   - Ensure your input crops are resized to `(224, 224)`.
 - **Push to GitHub fails?**
   - Run `git pull --rebase` before pushing, or use `git push --force` if you want to overwrite remote changes.
+- **YOLO output always shows `0:`?**
+  - This is normal: YOLO prints `0:` for each frame since you process one frame at a time.
 
 ---
 

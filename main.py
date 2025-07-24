@@ -8,15 +8,15 @@ from models.fusion_reid import FusionReID
 from models.cnn_backbone import build_resnet50
 from models.transformer_backbone import build_vit_b16
 from detectors.yolo_detector import YOLODetector
-from reid.matcher import match_embeddings
-from reid.id_manager import IDManager
+from reid.matcher import DeepSortMatcher
 from utils.preprocessing import preprocess_crop
 from utils.visualization import draw_boxes
+from deep_sort_realtime.deepsort_tracker import DeepSort
 
 VideoWriter_fourcc = cv2.VideoWriter_fourcc  # type: ignore[attr-defined]
 
 # --- Load Config ---
-with open('configs/fusion_reid.yaml', 'r') as f:
+with open('configs/config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
 # --- Initialize Modules ---
@@ -39,7 +39,18 @@ model.eval()
 
 detector_model_path = config.get('detector', {}).get('model_path', 'yolov8n.pt')
 detector = YOLODetector(model_path=detector_model_path, conf_threshold=detector_conf)
-id_manager = IDManager()
+# --- Deep SORT config ---
+deep_sort_cfg = config.get('deep_sort', {})
+matcher = DeepSortMatcher(
+    max_age=deep_sort_cfg.get('max_age', 30),
+    n_init=deep_sort_cfg.get('n_init', 3),
+    max_cosine_distance=deep_sort_cfg.get('max_cosine_distance', 0.2),
+    nms_max_overlap=deep_sort_cfg.get('nms_max_overlap', 1.0),
+    nn_budget=deep_sort_cfg.get('nn_budget', None),
+    half=True if device == 'cuda' else False,
+    bgr=True,
+    embedder_gpu=(device == 'cuda')
+)
 
 # --- Video Input ---
 input_video = config.get('video', {}).get('input', 'input.mp4')
@@ -52,12 +63,24 @@ writer = None
 matching_threshold = config.get('matching', {}).get('threshold', 0.4)
 
 frame_idx = 0
+tracker = DeepSort(
+    max_age=90,  # frames to keep 'lost' tracks
+    n_init=3,    # frames before track is confirmed
+    nms_max_overlap=1.0,
+    embedder=None,  # We'll provide our own embeddings
+    half=True if device == 'cuda' else False,
+    bgr=True,
+    embedder_gpu=device == 'cuda',
+    max_cosine_distance=0.2,  # can tune this
+    nn_budget=None,
+    override_track_class=None
+)
+
 while True:
     ret, frame = cap.read()
     if not ret:
         break
-    
-    frame_idx+= 1
+    frame_idx += 1
     # Detect persons
     boxes = detector.detect(frame)
     crops = []
@@ -66,29 +89,25 @@ while True:
         if not isinstance(crop, torch.Tensor):
             crop = torch.from_numpy(np.array(crop))
         crops.append(crop)
-
     if len(crops) == 0:
         continue
-
     # Re-ID Embeddings
-    try:
-        inputs = torch.stack(crops).to(device)
-    except Exception as e:
-        print(f"Skipping frame due to crop error: {e}")
-        continue
+    inputs = torch.stack(crops).to(device)
+    print(f"inputs shape: {inputs.shape}")
     with torch.no_grad():
-        embeddings = model(inputs).cpu()
-
-    # Match IDs
-    matched_ids = match_embeddings(embeddings, id_manager, threshold=matching_threshold)
-    for i, pid in enumerate(matched_ids):
-        if pid == -1:
-            pid = id_manager.get_next_id()
-        id_manager.update(pid, embeddings[i])
-
+        embeddings = model(inputs).cpu().numpy()
+        print(f"embeddings shape: {embeddings.shape}")
+    # Deep SORT tracking
+    tracks = matcher.update_tracks(boxes, embeddings, frame)
     # Draw output
-    frame = draw_boxes(frame, boxes, matched_ids)
-
+    for track in tracks:
+        if not track.is_confirmed():
+            continue
+        track_id = track.track_id
+        ltrb = track.to_ltrb()
+        x1, y1, x2, y2 = map(int, ltrb)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+        cv2.putText(frame, f'ID {track_id}', (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 2)
     if writer is None:
         fourcc = VideoWriter_fourcc(*'mp4v')
         writer = cv2.VideoWriter(output_video, fourcc, 30, (frame.shape[1], frame.shape[0]))
