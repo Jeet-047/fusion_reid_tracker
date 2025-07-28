@@ -62,25 +62,11 @@ writer = None
 
 matching_threshold = config.get('matching', {}).get('threshold', 0.4)
 
-frame_idx = 0
-tracker = DeepSort(
-    max_age=90,  # frames to keep 'lost' tracks
-    n_init=3,    # frames before track is confirmed
-    nms_max_overlap=1.0,
-    embedder=None,  # We'll provide our own embeddings
-    half=True if device == 'cuda' else False,
-    bgr=True,
-    embedder_gpu=device == 'cuda',
-    max_cosine_distance=0.2,  # can tune this
-    nn_budget=None,
-    override_track_class=None
-)
-
 while True:
     ret, frame = cap.read()
     if not ret:
         break
-    frame_idx += 1
+    
     # Detect persons
     boxes = detector.detect(frame)
     crops = []
@@ -91,15 +77,15 @@ while True:
         crops.append(crop)
     if len(crops) == 0:
         continue
-    # Re-ID Embeddings
+
     inputs = torch.stack(crops).to(device)
-    print(f"inputs shape: {inputs.shape}")
+
     with torch.no_grad():
         embeddings = model(inputs).cpu().numpy()
-        print(f"embeddings shape: {embeddings.shape}")
+
     # Deep SORT tracking
     tracks = matcher.update_tracks(boxes, embeddings, frame)
-    # Draw output
+
     for track in tracks:
         if not track.is_confirmed():
             continue

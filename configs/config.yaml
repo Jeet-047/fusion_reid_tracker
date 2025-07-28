@@ -12,7 +12,6 @@ video:
   input: Office_Test_Video.mp4
   output: Office_Test_Video_Output.mp4
 
-
 deep_sort:
   max_age: 90
   n_init: 3
